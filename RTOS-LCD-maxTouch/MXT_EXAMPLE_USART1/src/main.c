@@ -14,6 +14,10 @@
 /* Globals                                                              */
 /************************************************************************/
 volatile uint32_t g_ul_value = 0;
+volatile uint32_t temp_value = 0;
+volatile char temp_text[32];
+
+
 /* Canal do sensor de temperatura */
 #define AFEC_CHANNEL 0
 
@@ -218,12 +222,21 @@ static void mxt_init(struct mxt_device *device)
 /************************************************************************/
 /* Callbacks: / Handler                                                 */
 /************************************************************************/
+
+/*
 static void AFEC_callback(void)
 {
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	//printf("but_callback \n");
+	printf("but_callback \n");
 	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
-	//printf("semafaro tx \n");
+	printf("semafaro tx \n");
+}*/
+
+static void AFEC_callback(void)
+{
+	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
+	//xQueueSendFromISR( xQueue1, &result, NULL);
+	
 }
 
 /************************************************************************/
@@ -253,7 +266,10 @@ void draw_screen(void) {
 	ili9488_draw_pixmap(210, 20, soneca.width, soneca.height, soneca.data);
 }
 
-
+void draw_temp(void) {
+	sprintf(temp_text, "%d", convert_adc_to_temp(temp_value));
+	font_draw_text(&digital52, temp_text, 100, 220, 1);
+}
 
 void draw_button(uint32_t clicked) {
 	static uint32_t last_state = 255; // undefined
@@ -284,13 +300,7 @@ uint32_t convert_axis_system_y(uint32_t touch_x) {
 }
 
 void update_screen(uint32_t tx, uint32_t ty) {
-	if(tx >= BUTTON_X-BUTTON_W/2 && tx <= BUTTON_X + BUTTON_W/2) {
-		if(ty >= BUTTON_Y-BUTTON_H/2 && ty <= BUTTON_Y) {
-			draw_button(1);
-			} else if(ty > BUTTON_Y && ty < BUTTON_Y + BUTTON_H/2) {
-			draw_button(0);
-		}
-	}
+	printf("%d", g_ul_value);
 }
 
 void mxt_handler(struct mxt_device *device, uint *x, uint *y)
@@ -350,7 +360,7 @@ static void config_ADC(void){
 	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
 
 	/* configura call back */
-	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_0,	AFEC_callback, 1);
+	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_0,	AFEC_callback, 5);
 
 	/*** Configuracao espec?fica do canal AFEC ***/
 	struct afec_ch_config afec_ch_cfg;
@@ -425,9 +435,11 @@ void task_afec(void){
 			//100ms
 			//const TickType_t xDelay = 100/ portTICK_PERIOD_MS;
 			g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
+			printf("%d", g_ul_value);
 			char b[512];
 			sprintf(b, g_ul_value);
 			font_draw_text(&digital52, b, 110, 380, 1);
+			
 			
 		}
 	}
@@ -479,10 +491,6 @@ int main(void)
 
 	/* incializa convers?o ADC */
 	afec_start_software_conversion(AFEC0);
-
-	while(1){
-
-	}
 
 
 	return 0;
