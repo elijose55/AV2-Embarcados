@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "tfont.h"
+#include <assert.h>
+
 #include "conf_board.h"
 #include "conf_example.h"
 #include "conf_uart_serial.h"
@@ -12,8 +13,10 @@
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
+volatile uint32_t g_ul_value = 0;
 /* Canal do sensor de temperatura */
 #define AFEC_CHANNEL 0
+
 
 
 
@@ -43,6 +46,9 @@ const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
 
 #define TASK_LCD_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
 #define TASK_LCD_STACK_PRIORITY        (tskIDLE_PRIORITY)
+
+#define TASK_AFEC_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
+#define TASK_AFEC_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
 typedef struct {
 	uint x;
@@ -214,6 +220,10 @@ static void mxt_init(struct mxt_device *device)
 /************************************************************************/
 static void AFEC_callback(void)
 {
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	//printf("but_callback \n");
+	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
+	//printf("semafaro tx \n");
 }
 
 /************************************************************************/
@@ -410,11 +420,14 @@ void task_afec(void){
 	xSemaphore = xSemaphoreCreateBinary();
 	
 	for (;;) {
-		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 4000) == pdTRUE ){
+		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 10) == pdTRUE ){
 			
 			//100ms
 			//const TickType_t xDelay = 100/ portTICK_PERIOD_MS;
-			g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL_TEMP_SENSOR);
+			g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
+			char b[512];
+			sprintf(b, g_ul_value);
+			font_draw_text(&digital52, b, 110, 380, 1);
 			
 		}
 	}
@@ -436,9 +449,15 @@ int main(void)
 
 	sysclk_init(); /* Initialize system clocks */
 	board_init();  /* Initialize board */
+	ioport_init();
+	
+	/* inicializa e configura adc */
+	config_ADC();
 	
 	/* Initialize stdio on USART */
 	stdio_serial_init(USART_SERIAL_EXAMPLE, &usart_serial_options);
+	
+	
 	
 	/* Create task to handler touch */
 	if (xTaskCreate(task_mxt, "mxt", TASK_MXT_STACK_SIZE, NULL, TASK_MXT_STACK_PRIORITY, NULL) != pdPASS) {
@@ -449,9 +468,17 @@ int main(void)
 	if (xTaskCreate(task_lcd, "lcd", TASK_LCD_STACK_SIZE, NULL, TASK_LCD_STACK_PRIORITY, NULL) != pdPASS) {
 		printf("Failed to create test led task\r\n");
 	}
+	
+	/* Create task to AFEC converter */
+	if (xTaskCreate(task_afec, "afec", TASK_AFEC_STACK_SIZE, NULL, TASK_AFEC_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create test led task\r\n");
+	}
 
 	/* Start the scheduler. */
 	vTaskStartScheduler();
+
+	/* incializa convers?o ADC */
+	afec_start_software_conversion(AFEC0);
 
 	while(1){
 

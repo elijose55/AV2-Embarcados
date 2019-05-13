@@ -39,10 +39,12 @@
     <option id="common.services.basic.serial" value="Add" config="" content-id="Atmel.ASF" />
     <option id="common.utils.stdio.stdio_serial" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.components.display.ili9488" value="Add" config="spi" content-id="Atmel.ASF" />
+    <option id="sam.drivers.afec" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.drivers.mpu" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.drivers.pio" value="Add" config="" content-id="Atmel.ASF" />
+    <option id="sam.drivers.usart" value="Add" config="" content-id="Atmel.ASF" />
     <option id="thirdparty.os.freertos.version" value="Add" config="8.2.3" content-id="Atmel.ASF" />
-    <option id="sam.drivers.afec" value="Add" config="" content-id="Atmel.ASF" />
+    <option id="sam.drivers.uart" value="Add" config="" content-id="Atmel.ASF" />
     <option id="common.components.touch.mxt.example_usart" value="Add" config="" content-id="Atmel.ASF" />
     <option id="sam.utils.cmsis.same70.source.template" value="Add" config="" content-id="Atmel.ASF" />
   </options>
