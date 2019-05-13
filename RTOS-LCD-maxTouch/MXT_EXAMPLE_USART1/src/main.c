@@ -16,12 +16,19 @@
 volatile uint32_t g_ul_value = 0;
 volatile uint32_t temp_value = 0;
 volatile char temp_text[32];
+volatile char texto[32];
 
 
 /* Canal do sensor de temperatura */
 #define AFEC_CHANNEL 0
 
+////// AFEC
+/** Reference voltage for AFEC,in mv. */
+#define VOLT_REF        (3300)
 
+/** The maximal digital value */
+/** 2^12 - 1                  */
+#define MAX_DIGITAL     (4095)
 
 
 //ICONS
@@ -42,6 +49,40 @@ const uint32_t BUTTON_BORDER = 2;
 const uint32_t BUTTON_X = ILI9488_LCD_WIDTH/2;
 const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
 
+#define BUT_PIO           PIOD
+#define BUT_PIO_ID        ID_PIOD
+#define BUT_PIO_IDX       28u
+#define BUT_IDX_MASK  (1u << BUT_PIO_IDX)
+
+#define BUT2_PIO          PIOC
+#define BUT2_PIO_ID        ID_PIOC
+#define BUT2_PIO_IDX       31u
+#define BUT2_IDX_MASK  (1u << BUT2_PIO_IDX)
+
+/************************************************************************/
+/* PWM                                                        */
+/************************************************************************/
+
+#include "asf.h"
+#include "stdio_serial.h"
+#include "conf_board.h"
+#include "conf_clock.h"
+
+#define PIO_PWM_0 PIOA
+#define ID_PIO_PWM_0 ID_PIOA
+#define MASK_PIN_PWM_0 (1 << 0)
+
+/** PWM frequency in Hz */
+#define PWM_FREQUENCY      1000
+/** Period value of PWM output waveform */
+#define PERIOD_VALUE       100
+/** Initial duty cycle value */
+#define INIT_DUTY_VALUE    0
+#define AFEC_CHANNEL_RES_PIN 5
+
+/** PWM channel instance for LEDs */
+pwm_channel_t g_pwm_channel_led;
+
 /************************************************************************/
 /* RTOS                                                                  */
 /************************************************************************/
@@ -61,7 +102,12 @@ typedef struct {
 
 
 QueueHandle_t xQueueTouch;
+
+/** Semaforo task led */
 SemaphoreHandle_t xSemaphore;
+SemaphoreHandle_t xSemaphore2;
+
+
 
 
 /************************************************************************/
@@ -235,13 +281,21 @@ static void AFEC_callback(void)
 static void AFEC_callback(void)
 {
 	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
-	//xQueueSendFromISR( xQueue1, &result, NULL);
 	
 }
 
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
+
+static int32_t convert_adc_to_temp(int32_t ADC_value){
+
+  int32_t ul_vol;
+  int32_t ul_temp;
+	ul_temp = (100*ADC_value + 5900)/4026;
+  return(ul_temp-3);
+}
+
 void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
 	char *p = text;
 	while(*p != NULL) {
@@ -266,9 +320,9 @@ void draw_screen(void) {
 	ili9488_draw_pixmap(210, 20, soneca.width, soneca.height, soneca.data);
 }
 
-void draw_temp(void) {
-	sprintf(temp_text, "%d", convert_adc_to_temp(temp_value));
-	font_draw_text(&digital52, temp_text, 100, 220, 1);
+void draw_temp(int t) {
+	sprintf(temp_text, "%d", t);
+	font_draw_text(&digital52, temp_text, 110, 380, 1);
 }
 
 void draw_button(uint32_t clicked) {
@@ -411,6 +465,7 @@ void task_lcd(void){
 	configure_lcd();
 	
 	draw_screen();
+	draw_temp(temp_value);
 	//draw_button(0);
 	// Escreve HH:MM no LCD
 	font_draw_text(&digital52, "HH:MM", 0, 0, 1);
@@ -426,9 +481,20 @@ void task_lcd(void){
 }
 
 void task_afec(void){
+
+  while( true){
+	  afec_start_software_conversion(AFEC0);
+	  vTaskDelay(500);
+	  draw_temp(convert_adc_to_temp(temp_value));
+	  printf(" Temp AFEC: %d \r \n ", convert_adc_to_temp(temp_value));
+	  
+  }
+}
 	
+	
+	
+	/*
 	xSemaphore = xSemaphoreCreateBinary();
-	
 	for (;;) {
 		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 10) == pdTRUE ){
 			
@@ -439,10 +505,8 @@ void task_afec(void){
 			char b[512];
 			sprintf(b, g_ul_value);
 			font_draw_text(&digital52, b, 110, 380, 1);
-			
-			
 		}
-	}
+	}/*
 }
 
 /************************************************************************/
@@ -489,9 +553,11 @@ int main(void)
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
-	/* incializa convers?o ADC */
-	afec_start_software_conversion(AFEC0);
+  while(1){
+
+  }
 
 
-	return 0;
+  return 0;
+
 }
