@@ -9,7 +9,13 @@
 #include "tfont.h"
 #include "digital521.h"
 
-//afec0 canal 0
+/************************************************************************/
+/* Globals                                                              */
+/************************************************************************/
+/* Canal do sensor de temperatura */
+#define AFEC_CHANNEL 0
+
+
 
 //ICONS
 
@@ -45,6 +51,8 @@ typedef struct {
 
 
 QueueHandle_t xQueueTouch;
+SemaphoreHandle_t xSemaphore;
+
 
 /************************************************************************/
 /* RTOS hooks                                                           */
@@ -200,6 +208,14 @@ static void mxt_init(struct mxt_device *device)
 	+ MXT_GEN_COMMANDPROCESSOR_CALIBRATE, 0x01);
 }
 
+
+/************************************************************************/
+/* Callbacks: / Handler                                                 */
+/************************************************************************/
+static void AFEC_callback(void)
+{
+}
+
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
@@ -305,6 +321,50 @@ void mxt_handler(struct mxt_device *device, uint *x, uint *y)
 
 
 
+
+
+
+static void config_ADC(void){
+	afec_enable(AFEC0);
+
+	/* struct de configuracao do AFEC */
+	struct afec_config afec_cfg;
+
+	/* Carrega parametros padrao */
+	afec_get_config_defaults(&afec_cfg);
+
+	/* Configura AFEC */
+	afec_init(AFEC0, &afec_cfg);
+
+	/* Configura trigger por software */
+	afec_set_trigger(AFEC0, AFEC_TRIG_SW);
+
+	/* configura call back */
+	afec_set_callback(AFEC0, AFEC_INTERRUPT_EOC_0,	AFEC_callback, 1);
+
+	/*** Configuracao espec?fica do canal AFEC ***/
+	struct afec_ch_config afec_ch_cfg;
+	afec_ch_get_config_defaults(&afec_ch_cfg);
+	afec_ch_cfg.gain = AFEC_GAINVALUE_0;
+	afec_ch_set_config(AFEC0, AFEC_CHANNEL, &afec_ch_cfg);
+
+	/*
+	* Calibracao:
+	* Because the internal ADC offset is 0x200, it should cancel it and shift
+	 down to 0.
+	 */
+	afec_channel_set_analog_offset(AFEC0, AFEC_CHANNEL, 0x200);
+
+	/***  Configura sensor de temperatura ***/
+	struct afec_temp_sensor_config afec_temp_sensor_cfg;
+
+	afec_temp_sensor_get_config_defaults(&afec_temp_sensor_cfg);
+	afec_temp_sensor_set_config(AFEC0, &afec_temp_sensor_cfg);
+
+	/* Selecina canal e inicializa convers?o */
+	afec_channel_enable(AFEC0, AFEC_CHANNEL);
+}
+
 /************************************************************************/
 /* tasks                                                                */
 /************************************************************************/
@@ -341,6 +401,21 @@ void task_lcd(void){
 		if (xQueueReceive( xQueueTouch, &(touch), ( TickType_t )  500 / portTICK_PERIOD_MS)) {
 			update_screen(touch.x, touch.y);
 			printf("x:%d y:%d\n", touch.x, touch.y);
+		}
+	}
+}
+
+void task_afec(void){
+	
+	xSemaphore = xSemaphoreCreateBinary();
+	
+	for (;;) {
+		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 4000) == pdTRUE ){
+			
+			//100ms
+			//const TickType_t xDelay = 100/ portTICK_PERIOD_MS;
+			g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL_TEMP_SENSOR);
+			
 		}
 	}
 }
