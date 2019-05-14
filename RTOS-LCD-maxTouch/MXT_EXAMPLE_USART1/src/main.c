@@ -90,7 +90,7 @@ pwm_channel_t g_pwm_channel_led;
 #define TASK_MXT_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
 #define TASK_MXT_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
-#define TASK_LCD_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
+#define TASK_LCD_STACK_SIZE            (4*1024/sizeof(portSTACK_TYPE))
 #define TASK_LCD_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
 #define TASK_AFEC_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
@@ -397,8 +397,8 @@ void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
 }
 
 void draw_screen(void) {
-	//ili9488_set_foreground_color(COLOR_CONVERT(COLOR_WHITE));
-	//ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_WHITE));
+	ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
 	ili9488_draw_pixmap(20, 250, ar.width, ar.height, ar.data);
 	ili9488_draw_pixmap(30, 380, termometro.width, termometro.height, termometro.data);
 	ili9488_draw_pixmap(210, 20, soneca.width, soneca.height, soneca.data);
@@ -422,7 +422,11 @@ uint32_t convert_axis_system_y(uint32_t touch_x) {
 }
 
 void update_screen(uint32_t tx, uint32_t ty) {
-	printf("%d", g_ul_value);
+	if(tx >= BUTTON_X-BUTTON_W/2 && tx <= BUTTON_X + BUTTON_W/2) {
+		if(ty >= BUTTON_Y-BUTTON_H/2 && ty <= BUTTON_Y) {
+			} else if(ty > BUTTON_Y && ty < BUTTON_Y + BUTTON_H/2) {
+		}
+	}
 }
 
 void mxt_handler(struct mxt_device *device, uint *x, uint *y)
@@ -512,36 +516,37 @@ static void config_ADC(void){
 /************************************************************************/
 
 void task_mxt(void){
-	
-	struct mxt_device device; /* Device data container */
-	mxt_init(&device);       	/* Initialize the mXT touch device */
-	touchData touch;          /* touch queue data type*/
-	
-	while (true) {
-		/* Check for any pending messages and run message handler if any
-		* message is found in the queue */
-		if (mxt_is_message_pending(&device)) {
-			mxt_handler(&device, &touch.x, &touch.y);
-			xQueueSend( xQueueTouch, &touch, 0);           /* send mesage to queue */
-		}
-		vTaskDelay(100);
+  
+  	struct mxt_device device; /* Device data container */
+  	mxt_init(&device);       	/* Initialize the mXT touch device */
+    touchData touch;          /* touch queue data type*/
+    
+  	while (true) {  
+		  /* Check for any pending messages and run message handler if any
+		   * message is found in the queue */
+		  if (mxt_is_message_pending(&device)) {
+		  	mxt_handler(&device, &touch.x, &touch.y);
+        xQueueSend( xQueueTouch, &touch, 0);           /* send mesage to queue */
+      }
+     vTaskDelay(100);
 	}
 }
 
 void task_lcd(void){
 	xQueueTouch = xQueueCreate( 10, sizeof( touchData ) );
 	configure_lcd();
-	//draw_button(0);
 	draw_screen();
-	// Escreve HH:MM no LCD
+	//Escreve HH:MM no LCD
 	font_draw_text(&digital52, "HH:MM", 0, 0, 1);
 	
 	
 	touchData touch;
 	
 	while (true) {
+		//
 		if (xQueueReceive( xQueueTouch, &(touch), ( TickType_t )  500 / portTICK_PERIOD_MS)) {
 			update_screen(touch.x, touch.y);
+			
 			printf("x:%d y:%d\n", touch.x, touch.y);
 		}
 	}
@@ -628,7 +633,6 @@ int main(void)
 
 	sysclk_init(); /* Initialize system clocks */
 	board_init();  /* Initialize board */
-	ioport_init();
 	pmc_enable_periph_clk(ID_PIO_PWM_0);
 	pio_set_peripheral(PIO_PWM_0, PIO_PERIPH_A, MASK_PIN_PWM_0 );
 	
