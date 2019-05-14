@@ -6,6 +6,8 @@ src\ASF\common\services\sleepmgr\sam\sleepmgr.c
 
 src\ASF\sam\drivers\afec\afec.c
 
+src\ASF\sam\drivers\pwm\pwm.c
+
 src\ASF\common\components\touch\mxt\mxt_device_1.c
 
 src\ASF\common\services\clock\same70\sysclk.c
