@@ -19,7 +19,8 @@
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
-volatile uint32_t g_ul_value = 0;
+volatile uint32_t temp_value = 0;
+volatile uint32_t adc_value = 0;
 volatile uint32_t duty = 0;
 volatile char temp_text[512];
 volatile char duty_text[512];
@@ -104,9 +105,10 @@ typedef struct {
 
 
 QueueHandle_t xQueueTouch;
-QueueHandle_t xQueueRealTemp;
-QueueHandle_t xQueueAnalog;
 QueueHandle_t xQueueTemp;
+QueueHandle_t xQueueRealTemp;
+QueueHandle_t xQueueAfec;
+
 QueueHandle_t xQueuePot;
 
 SemaphoreHandle_t xSemaphore;
@@ -278,7 +280,7 @@ static void AFEC_callback(void)
 {
 	int32_t temp_value;
 	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
-	xQueueSendFromISR( xQueueAnalog, &adcVal, 0);
+	xQueueSendFromISR( xQueueAfec, &adcVal, 0);
 	//temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
 	
 }
@@ -577,9 +579,15 @@ void task_lcd(void){
 			
 			printf("x:%d y:%d\n", touch.x, touch.y);
 		}
-		if (xQueueReceive( xQueueRealTemp, &(real_temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+		if (xQueueReceive(xQueueRealTemp, &(real_temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
 			draw_real_temp(real_temp);
-			pot = (temp < real_temp) ? (((real_temp - temp) * 100)/(100 - temp)) : 0;
+			pot = (temp < real_temp) ? (((real_temp - temp) * 100) / (100 - temp)) : 0;
+			draw_duty(pot);
+		}
+		if (xQueueReceive(xQueueTemp, &(temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+			draw_temp(temp);
+			pot = (temp < real_temp) ? (((real_temp - temp) * 100 ) / (100 - temp)) : 0;
+			xQueueSend(xQueuePot, &pot, 0);
 			draw_duty(pot);
 		}
 	}
@@ -597,14 +605,32 @@ static void task_pwm(void *pvParameters){
 }
 
 void task_afec(void){
+	xQueueAfec = xQueueCreate( 10, sizeof( int32_t ) );
 
+	config_ADC();
+	afec_start_software_conversion(AFEC0);
+	
+	int32_t adc_value;
+	int32_t temp_value;
+
+	while (true) {
+		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+			temp_value = convert_adc_to_temp(adc_value);
+			printf("Temp : %d \r\n", temp_value);
+			afec_start_software_conversion(AFEC0);
+			xQueueSend( xQueueTemp, &temp_value, 0);
+		}
+	}
+/*
   while(true){
 	  afec_start_software_conversion(AFEC0);
 	  vTaskDelay(500);
 	  draw_temp(convert_adc_to_temp(temp_value));
 	  printf(" Temp AFEC: %d \r \n ", convert_adc_to_temp(temp_value));
-	  
   }
+  */
+
+
 }
 	
 static void task_led(void *pvParameters)
