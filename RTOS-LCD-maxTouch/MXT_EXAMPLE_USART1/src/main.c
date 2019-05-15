@@ -595,6 +595,12 @@ void task_lcd(void){
 
 static void task_pwm(void *pvParameters){
 	const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
+	
+	/* Configura pino para ser controlado pelo PWM */
+	pmc_enable_periph_clk(ID_PIO_PWM_0);
+	pio_set_peripheral(PIO_PWM_0, PIO_PERIPH_A, MASK_PIN_PWM_0 );
+		
+	/* inicializa PWM com dutycicle 0*/
 	PWM0_init(0, duty);
 
 	/* Infinite loop */
@@ -603,6 +609,8 @@ static void task_pwm(void *pvParameters){
 		vTaskDelay(xDelay);
 	}
 }
+
+
 
 void task_afec(void){
 	xQueueAfec = xQueueCreate( 10, sizeof( int32_t ) );
