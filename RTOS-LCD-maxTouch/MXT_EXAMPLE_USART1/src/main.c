@@ -26,6 +26,7 @@ volatile uint32_t duty = 0;
 volatile char temp_text[512];
 volatile char fan_text[512];
 volatile char duty_text[512];
+volatile char time_text[512];
 volatile char texto[32];
 
 
@@ -89,6 +90,20 @@ const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
 pwm_channel_t g_pwm_channel_led;
 
 /************************************************************************/
+/* RTC                                                        */
+/************************************************************************/
+
+#define YEAR        2019
+#define MOUNTH      1
+#define DAY         1
+#define WEEK        1
+#define HOUR        0
+#define MINUTE      0
+#define SECOND      0
+
+volatile Bool flag_rtc_alarme = true;
+
+/************************************************************************/
 /* RTOS                                                                  */
 /************************************************************************/
 #define TASK_MXT_STACK_SIZE            (2*1024/sizeof(portSTACK_TYPE))
@@ -116,6 +131,7 @@ QueueHandle_t xQueuePot;
 
 SemaphoreHandle_t xSemaphore;
 SemaphoreHandle_t xSemaphore2;
+SemaphoreHandle_t xSemaphoreRTC;
 
 
 
@@ -300,9 +316,67 @@ void but_callback2(void){
 	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
 }
 
+void RTC_Handler(void)
+{
+	uint32_t ul_status = rtc_get_status(RTC);
+
+	/*
+	*  Verifica por qual motivo entrou
+	*  na interrupcao, se foi por segundo
+	*  ou Alarm
+	*/
+	
+	/* Time or date alarm */
+	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
+			printf("KKKKKKKKK\n");
+			rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
+			printf("oi");
+			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+			printf("QTQ");
+			//rtc_clear_status(RTC, RTC_SCCR_SECCLR);
+			xSemaphoreGiveFromISR(xSemaphoreRTC, &xHigherPriorityTaskWoken);
+			
+			printf("rtc_callback333\n");
+	}
+	
+	rtc_clear_status(RTC, RTC_SCCR_ACKCLR);
+	rtc_clear_status(RTC, RTC_SCCR_TIMCLR);
+	rtc_clear_status(RTC, RTC_SCCR_CALCLR);
+	rtc_clear_status(RTC, RTC_SCCR_TDERRCLR);
+	
+}
+
 /************************************************************************/
 /* funcoes                                                              */
 /************************************************************************/
+
+/**
+* Configura o RTC para funcionar com interrupcao de alarme
+*/
+void RTC_init(){
+	/* Configura o PMC */
+	pmc_enable_periph_clk(ID_RTC);
+
+	/* Default RTC configuration, 24-hour mode */
+	rtc_set_hour_mode(RTC, 0);
+
+	/* Configura data e hora manualmente */
+	rtc_set_date(RTC, YEAR, MOUNTH, DAY, WEEK);
+	rtc_set_time(RTC, HOUR, MINUTE, SECOND);
+
+	/* Configure RTC interrupts */
+	NVIC_DisableIRQ(RTC_IRQn);
+	NVIC_ClearPendingIRQ(RTC_IRQn);
+	NVIC_SetPriority(RTC_IRQn, 0);
+	NVIC_EnableIRQ(RTC_IRQn);
+
+	/* Ativa interrupcao via segundos */
+	rtc_enable_interrupt(RTC,  RTC_IER_ALREN);
+	
+
+
+}
+
 
 void io_init(void)
 {
@@ -617,7 +691,7 @@ void task_lcd(void){
 	configure_lcd();
 	draw_screen();
 	//Escreve HH:MM no LCD
-	font_draw_text(&digital52, "HH:MM", 0, 0, 1);
+	//font_draw_text(&digital52, "HH:MM", 0, 0, 1);
 	
 	
 	touchData touch;
@@ -681,24 +755,49 @@ void task_afec(void){
 	int32_t temp_value;
 
 	while (true) {
-		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  4000 / portTICK_PERIOD_MS)) {
+		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  2000 / portTICK_PERIOD_MS)) {
 			temp_value = convert_adc_to_temp(adc_value);
 			//printf("Temp : %d \r\n", temp_value);
 			afec_start_software_conversion(AFEC0);
 			xQueueSend( xQueueTemp, &temp_value, 0);
 		}
 	}
-/*
-  while(true){
-	  afec_start_software_conversion(AFEC0);
-	  vTaskDelay(500);
-	  draw_temp(convert_adc_to_temp(temp_value));
-	  printf(" Temp AFEC: %d \r \n ", convert_adc_to_temp(temp_value));
-  }
-  */
-
-
 }
+
+
+
+static void task_rtc(void *pvParameters)
+{
+	printf("\n task rtc \n");
+	xSemaphoreRTC = xSemaphoreCreateBinary();
+	RTC_init();
+	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE+1,1, SECOND);
+	int hora, min, sec;
+
+	if (xSemaphoreRTC == NULL)
+	printf("falha em criar o semaforoRTC \n");
+
+	while (1) {
+		if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 10) == pdTRUE){
+			printf("entrou");
+			rtc_get_time(RTC, &hora, &min, &sec);
+			printf("\n rtc: %d, %d, %d \n", hora, min, sec);
+			min++;
+			if(min>=60){
+				min = 0;
+				hora++;
+			}
+			if(hora>=24){
+				hora = 0;
+			}
+			rtc_set_time_alarm(RTC, 1, hora, 1, min, 1, sec);
+			sprintf(time_text,"%02d : %02d", hora, min);
+			font_draw_text(&digital52, time_text, 2, 2, 1);
+		}
+		
+	}
+}
+
 	
 static void task_led(void *pvParameters)
 {
@@ -790,6 +889,10 @@ int main(void)
 	
 	/* Create task to PWM converter */
 	if (xTaskCreate(task_led, "led", TASK_AFEC_STACK_SIZE, NULL, TASK_AFEC_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create test led task\r\n");
+	}
+	
+	if (xTaskCreate(task_rtc, "rtc", TASK_AFEC_STACK_SIZE, NULL, TASK_AFEC_STACK_PRIORITY, NULL) != pdPASS) {
 		printf("Failed to create test led task\r\n");
 	}
 	/* Start the scheduler. */
