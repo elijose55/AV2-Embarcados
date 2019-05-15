@@ -21,6 +21,7 @@
 /************************************************************************/
 //volatile uint32_t temp_value = 0;
 //volatile uint32_t adc_value = 0;
+volatile uint32_t duty = 0;
 volatile char temp_text[512];
 volatile char duty_text[512];
 volatile char texto[32];
@@ -104,8 +105,9 @@ typedef struct {
 
 
 QueueHandle_t xQueueTouch;
+QueueHandle_t xQueueDuty;
 QueueHandle_t xQueueTemp;
-QueueHandle_t xQueueRealTemp;
+//QueueHandle_t xQueueRealTemp;
 QueueHandle_t xQueueAfec;
 
 QueueHandle_t xQueuePot;
@@ -279,7 +281,7 @@ static void AFEC_callback(void)
 {
 	int32_t temp_value;
 	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
-	xQueueSendFromISR( xQueueAfec, &adcVal, 0);
+	xQueueSendFromISR( xQueueAfec, &temp_value, 0);
 	//temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
 	
 }
@@ -288,14 +290,12 @@ void but_callback(void){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback \n");
 	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
-	printf("semafaro tx \n");
 }
 
 void but_callback2(void){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback2\n");
 	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
-	printf("semafaro tx2 \n");
 }
 
 /************************************************************************/
@@ -422,14 +422,10 @@ void draw_screen(void) {
 }
 
 void draw_temp(int temp) {
-	sprintf(temp_text, "%2d", temp);
+	sprintf(temp_text, "%2d C  ", temp);
 	font_draw_text(&digital52, temp_text, 110, 380, 1);
 }
 
-void draw_real_temp(int temp) {
-	sprintf(temp_text, "%2d", temp);
-	font_draw_text(&digital52, temp_text, 200, 200, 1);
-}
 
 void draw_duty(int duty) {
 	sprintf(duty_text, "%2d", duty);
@@ -557,7 +553,7 @@ void task_mxt(void){
 
 void task_lcd(void){
 	xQueueTouch = xQueueCreate( 10, sizeof( touchData ) );
-	xQueueRealTemp = xQueueCreate( 10, sizeof( int32_t ) );
+	xQueueDuty = xQueueCreate( 10, sizeof( int32_t ) );
 	xQueueTemp = xQueueCreate( 10, sizeof( int32_t ) );
 	
 	configure_lcd();
@@ -569,7 +565,7 @@ void task_lcd(void){
 	touchData touch;
 	int32_t temp = 25;
 	int32_t real_temp = 25;
-	int32_t pot = 0;
+	int32_t duty = 0;
 	
 	while (true) {
 		//
@@ -578,17 +574,21 @@ void task_lcd(void){
 			
 			printf("x:%d y:%d\n", touch.x, touch.y);
 		}
-		if (xQueueReceive(xQueueRealTemp, &(real_temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
-			draw_real_temp(real_temp);
-			pot = (temp < real_temp) ? (((real_temp - temp) * 100) / (100 - temp)) : 0;
-			draw_duty(pot);
+		if (xQueueReceive(xQueueDuty, &(duty), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+			printf("\n potencia: %d", duty);
+			draw_duty(duty);
+			vTaskDelay(300 / portTICK_PERIOD_MS);
 		}
 		if (xQueueReceive(xQueueTemp, &(temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
 			draw_temp(temp);
-			pot = (temp < real_temp) ? (((real_temp - temp) * 100 ) / (100 - temp)) : 0;
-			xQueueSend(xQueuePot, &pot, 0);
-			draw_duty(pot);
+			//pot = (temp < real_temp) ? (((real_temp - temp) * 100 ) / (100 - temp)) : 0;
+			//pot = 100 * (real_temp - temp) / (100 - temp);
+			//xQueueSend(xQueuePot, &pot, 0);
+			//draw_duty(pot);
+			
+			printf("\ntemperatura desejada: %d", temp);
 		}
+
 	}
 }
 
@@ -604,9 +604,11 @@ static void task_pwm(void){
 
 	while (1) {
 		if (xQueueReceive( xQueuePot, &(pot), ( TickType_t ) 10 / portTICK_PERIOD_MS)) {
-			pwm_channel_update_duty(PWM0, &g_pwm_channel_led,(pot));
+			pwm_channel_update_duty(PWM0, &g_pwm_channel_led,(100 - pot));
 			printf("duty: %d", pot);
-			vTaskDelay(1500 / portTICK_PERIOD_MS);
+			vTaskDelay(300 / portTICK_PERIOD_MS);
+			xQueueSend(xQueueDuty, &pot, 0);
+			
 		}
 	}
 }
@@ -623,7 +625,7 @@ void task_afec(void){
 	while (true) {
 		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
 			temp_value = convert_adc_to_temp(adc_value);
-			printf("Temp : %d \r\n", temp_value);
+			//printf("Temp : %d \r\n", temp_value);
 			afec_start_software_conversion(AFEC0);
 			xQueueSend( xQueueTemp, &temp_value, 0);
 		}
@@ -657,17 +659,16 @@ static void task_led(void *pvParameters)
 
 	while (1) {
 		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 500) == pdTRUE && duty < 100){
-			duty = duty + 5;
+			duty = duty + 10;
 			printf("%d", duty);
 		}
 		if( xSemaphoreTake(xSemaphore2, ( TickType_t ) 500) == pdTRUE && duty > 0 ){
-			duty = duty - 5;
+			duty = duty - 10;
 			printf("%d", duty);
 			
 		}
-		xQueueSend( xQueueTemp, &duty, 0);
-		//sprintf(texto, "%d", duty);
-		//font_draw_text(&digital52, texto, 110, 250, 1);
+		xQueueSend( xQueuePot, &duty, 0);
+		
 	}
 }
 	
@@ -703,9 +704,6 @@ int main(void)
 
 	sysclk_init(); /* Initialize system clocks */
 	board_init();  /* Initialize board */
-	
-	/* inicializa e configura adc */
-	config_ADC();
 	
 	/* Initialize stdio on USART */
 	stdio_serial_init(USART_SERIAL_EXAMPLE, &usart_serial_options);
