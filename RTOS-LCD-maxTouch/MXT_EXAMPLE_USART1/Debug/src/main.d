@@ -212,7 +212,7 @@ src/main.d src/main.o: ../src/main.c ../src/asf.h \
  e:\apps\atmel\studio\7.0\toolchain\arm\arm-gnu-toolchain\arm-none-eabi\include\assert.h \
  ../src/config/conf_board.h ../src/config/conf_example.h ../src/tfont.h \
  ../src/digital521.h ../src/ar.h ../src/soneca.h ../src/termometro.h \
- ../src/asf.h
+ ../src/fan.h ../src/asf.h
 
 ../src/asf.h:
 
@@ -669,5 +669,7 @@ e:\apps\atmel\studio\7.0\toolchain\arm\arm-gnu-toolchain\arm-none-eabi\include\a
 ../src/soneca.h:
 
 ../src/termometro.h:
+
+../src/fan.h:
 
 ../src/asf.h:

@@ -15,6 +15,7 @@
 #include "ar.h"
 #include "soneca.h"
 #include "termometro.h"
+#include "fan.h"  //https://www.flaticon.com/free-icon/ac_95252
 
 /************************************************************************/
 /* Globals                                                              */
@@ -23,6 +24,7 @@
 //volatile uint32_t adc_value = 0;
 volatile uint32_t duty = 0;
 volatile char temp_text[512];
+volatile char fan_text[512];
 volatile char duty_text[512];
 volatile char texto[32];
 
@@ -374,6 +376,40 @@ void PWM0_init(uint channel, uint duty){
 	pwm_channel_enable(PWM0, channel);
 }
 
+void PWM1_init(uint channel, uint duty){
+	/* Enable PWM peripheral clock */
+	pmc_enable_periph_clk(ID_PWM1);
+
+	/* Disable PWM channels for LEDs */
+	pwm_channel_disable(PWM1, PIN_PWM_LED1_CHANNEL);
+
+	/* Set PWM clock A as PWM_FREQUENCY*PERIOD_VALUE (clock B is not used) */
+	pwm_clock_t clock_setting = {
+		.ul_clka = PWM_FREQUENCY * PERIOD_VALUE,
+		.ul_clkb = 0,
+		.ul_mck = sysclk_get_peripheral_hz()
+	};
+	
+	pwm_init(PWM1, &clock_setting);
+
+	/* Initialize PWM channel for LED0 */
+	/* Period is left-aligned */
+	g_pwm_channel_led.alignment = PWM_ALIGN_CENTER;
+	/* Output waveform starts at a low level */
+	g_pwm_channel_led.polarity = PWM_HIGH;
+	/* Use PWM clock A as source clock */
+	g_pwm_channel_led.ul_prescaler = PWM_CMR_CPRE_CLKA;
+	/* Period value of output waveform */
+	g_pwm_channel_led.ul_period = PERIOD_VALUE;
+	/* Duty cycle value of output waveform */
+	g_pwm_channel_led.ul_duty = duty;
+	g_pwm_channel_led.channel = channel;
+	pwm_channel_init(PWM1, &g_pwm_channel_led);
+	
+	/* Enable PWM channels for LEDs */
+	pwm_channel_enable(PWM1, channel);
+}
+
 static int32_t convert_adc_to_temp2(int32_t ADC_value){
 
   int32_t ul_vol;
@@ -419,13 +455,35 @@ void draw_screen(void) {
 	ili9488_draw_pixmap(20, 250, ar.width, ar.height, ar.data);
 	ili9488_draw_pixmap(30, 380, termometro.width, termometro.height, termometro.data);
 	ili9488_draw_pixmap(210, 20, soneca.width, soneca.height, soneca.data);
+	ili9488_draw_pixmap(37, 130, fan.width, fan.height, fan.data);
 }
 
 void draw_temp(int temp) {
 	sprintf(temp_text, "%2d C  ", temp);
+	if(temp>70){
+		ili9488_set_foreground_color(COLOR_CONVERT(COLOR_TOMATO));
+		}
+	else if (temp > 50 && temp < 70){
+		ili9488_set_foreground_color(COLOR_CONVERT(COLOR_YELLOW));
+		}
+	else if (temp > 30 && temp < 50){
+		ili9488_set_foreground_color(COLOR_CONVERT(COLOR_ORANGE));
+		}
+	else if (temp > 10 && temp < 30){
+		ili9488_set_foreground_color(COLOR_CONVERT(COLOR_CYAN));
+	}
+	else{
+		ili9488_set_foreground_color(COLOR_CONVERT(COLOR_BLUE));
+	}
+	ili9488_draw_filled_rectangle(110,450,205,500);
 	font_draw_text(&digital52, temp_text, 110, 380, 1);
+	//ili9488_draw_filled_rectangle(14, ILI9488_LCD_HEIGHT - termometro.height+44, 19,ILI9488_LCD_HEIGHT - termometro.height - size +42 );
 }
 
+void draw_fan(int fan) {
+	sprintf(fan_text, "%2d  ", fan);
+	font_draw_text(&digital52, fan_text, 110, 130, 1);
+}
 
 void draw_duty(int duty) {
 	sprintf(duty_text, "%2d", duty);
@@ -623,7 +681,7 @@ void task_afec(void){
 	int32_t temp_value;
 
 	while (true) {
-		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  4000 / portTICK_PERIOD_MS)) {
 			temp_value = convert_adc_to_temp(adc_value);
 			//printf("Temp : %d \r\n", temp_value);
 			afec_start_software_conversion(AFEC0);

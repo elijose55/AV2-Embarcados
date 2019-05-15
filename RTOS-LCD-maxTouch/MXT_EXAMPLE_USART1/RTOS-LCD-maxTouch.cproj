@@ -787,6 +787,9 @@
     <None Include="src\ASF\sam\drivers\pwm\pwm.h">
       <SubType>compile</SubType>
     </None>
+    <Compile Include="src\fan.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\soneca.h">
       <SubType>compile</SubType>
     </Compile>
