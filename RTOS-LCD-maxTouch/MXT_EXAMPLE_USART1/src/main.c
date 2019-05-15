@@ -10,20 +10,26 @@
 #include "tfont.h"
 #include "digital521.h"
 
+//ICONS
+
+#include "ar.h"
+#include "soneca.h"
+#include "termometro.h"
+
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
 volatile uint32_t g_ul_value = 0;
-volatile uint32_t temp_value = 0;
 volatile uint32_t duty = 0;
-volatile char temp_text[32];
+volatile char temp_text[512];
+volatile char duty_text[512];
 volatile char texto[32];
 
 
 /* Canal do sensor de temperatura */
 #define AFEC_CHANNEL 0
 
-////// AFEC
+// AFEC
 /** Reference voltage for AFEC,in mv. */
 #define VOLT_REF        (3300)
 
@@ -32,11 +38,7 @@ volatile char texto[32];
 #define MAX_DIGITAL     (4095)
 
 
-//ICONS
 
-#include "ar.h"
-#include "soneca.h"
-#include "termometro.h"
 
 /************************************************************************/
 /* LCD + TOUCH                                                          */
@@ -79,7 +81,6 @@ const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
 #define PERIOD_VALUE       100
 /** Initial duty cycle value */
 #define INIT_DUTY_VALUE    0
-#define AFEC_CHANNEL_RES_PIN 5
 
 /** PWM channel instance for LEDs */
 pwm_channel_t g_pwm_channel_led;
@@ -103,23 +104,15 @@ typedef struct {
 
 
 QueueHandle_t xQueueTouch;
+QueueHandle_t xQueueRealTemp;
+QueueHandle_t xQueueAnalog;
+QueueHandle_t xQueueTemp;
+QueueHandle_t xQueuePot;
 
-/** Semaforo task led */
 SemaphoreHandle_t xSemaphore;
 SemaphoreHandle_t xSemaphore2;
 
-void but_callback(void){
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	printf("but_callback \n");
-	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
-	printf("semafaro tx \n");
-}
-void but_callback2(void){
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	printf("but_callback2222 \n");
-	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
-	printf("semafaro tx2222 \n");
-}
+
 
 
 /************************************************************************/
@@ -281,19 +274,27 @@ static void mxt_init(struct mxt_device *device)
 /* Callbacks: / Handler                                                 */
 /************************************************************************/
 
-/*
 static void AFEC_callback(void)
 {
+	int32_t temp_value;
+	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
+	xQueueSendFromISR( xQueueAnalog, &adcVal, 0);
+	//temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
+	
+}
+
+void but_callback(void){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback \n");
 	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
 	printf("semafaro tx \n");
-}*/
+}
 
-static void AFEC_callback(void)
-{
-	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
-	
+void but_callback2(void){
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	printf("but_callback2222 \n");
+	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
+	printf("semafaro tx2222 \n");
 }
 
 /************************************************************************/
@@ -372,7 +373,22 @@ void PWM0_init(uint channel, uint duty){
 	pwm_channel_enable(PWM0, channel);
 }
 
+static int32_t convert_adc_to_temp2(int32_t ADC_value){
 
+  int32_t ul_vol;
+  int32_t ul_temp;
+
+  /*
+   * converte bits -> tens?o (Volts)
+   */
+	ul_vol = ADC_value * 100 / 4096;
+
+  /*
+   * According to datasheet, The output voltage VT = 0.72V at 27C
+   * and the temperature slope dVT/dT = 2.33 mV/C
+   */
+  return(ul_vol);
+}
 
 static int32_t convert_adc_to_temp(int32_t ADC_value){
 
@@ -404,9 +420,19 @@ void draw_screen(void) {
 	ili9488_draw_pixmap(210, 20, soneca.width, soneca.height, soneca.data);
 }
 
-void draw_temp(int t) {
-	sprintf(temp_text, "%d", t);
+void draw_temp(int temp) {
+	sprintf(temp_text, "%2d", temp);
 	font_draw_text(&digital52, temp_text, 110, 380, 1);
+}
+
+void draw_real_temp(int temp) {
+	sprintf(temp_text, "%2d", temp);
+	font_draw_text(&digital52, temp_text, 200, 200, 1);
+}
+
+void draw_duty(int duty) {
+	sprintf(duty_text, "%2d", duty);
+	font_draw_text(&digital52, duty_text, 110, 250, 1);
 }
 
 uint32_t convert_axis_system_x(uint32_t touch_y) {
@@ -464,10 +490,6 @@ void mxt_handler(struct mxt_device *device, uint *x, uint *y)
 		* if we have reached the maximum numbers of events */
 	} while ((mxt_is_message_pending(device)) & (i < MAX_ENTRIES));
 }
-
-
-
-
 
 
 static void config_ADC(void){
@@ -534,6 +556,9 @@ void task_mxt(void){
 
 void task_lcd(void){
 	xQueueTouch = xQueueCreate( 10, sizeof( touchData ) );
+	xQueueRealTemp = xQueueCreate( 10, sizeof( int32_t ) );
+	xQueueTemp = xQueueCreate( 10, sizeof( int32_t ) );
+	
 	configure_lcd();
 	draw_screen();
 	//Escreve HH:MM no LCD
@@ -541,6 +566,9 @@ void task_lcd(void){
 	
 	
 	touchData touch;
+	int32_t temp = 25;
+	int32_t real_temp = 25;
+	int32_t pot = 0;
 	
 	while (true) {
 		//
@@ -548,6 +576,11 @@ void task_lcd(void){
 			update_screen(touch.x, touch.y);
 			
 			printf("x:%d y:%d\n", touch.x, touch.y);
+		}
+		if (xQueueReceive( xQueueRealTemp, &(real_temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
+			draw_real_temp(real_temp);
+			pot = (temp < real_temp) ? (((real_temp - temp) * 100)/(100 - temp)) : 0;
+			draw_duty(pot);
 		}
 	}
 }
