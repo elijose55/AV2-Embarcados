@@ -19,9 +19,8 @@
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
-volatile uint32_t temp_value = 0;
-volatile uint32_t adc_value = 0;
-volatile uint32_t duty = 0;
+//volatile uint32_t temp_value = 0;
+//volatile uint32_t adc_value = 0;
 volatile char temp_text[512];
 volatile char duty_text[512];
 volatile char texto[32];
@@ -294,9 +293,9 @@ void but_callback(void){
 
 void but_callback2(void){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	printf("but_callback2222 \n");
+	printf("but_callback2\n");
 	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
-	printf("semafaro tx2222 \n");
+	printf("semafaro tx2 \n");
 }
 
 /************************************************************************/
@@ -593,24 +592,24 @@ void task_lcd(void){
 	}
 }
 
-static void task_pwm(void *pvParameters){
+static void task_pwm(void){
 	const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
 	
-	/* Configura pino para ser controlado pelo PWM */
+	xQueuePot = xQueueCreate( 10, sizeof( int32_t ) );
+	int32_t pot;
+	
 	pmc_enable_periph_clk(ID_PIO_PWM_0);
 	pio_set_peripheral(PIO_PWM_0, PIO_PERIPH_A, MASK_PIN_PWM_0 );
-		
-	/* inicializa PWM com dutycicle 0*/
 	PWM0_init(0, duty);
 
-	/* Infinite loop */
 	while (1) {
-		pwm_channel_update_duty(PWM0, &g_pwm_channel_led, duty);
-		vTaskDelay(xDelay);
+		if (xQueueReceive( xQueuePot, &(pot), ( TickType_t ) 10 / portTICK_PERIOD_MS)) {
+			pwm_channel_update_duty(PWM0, &g_pwm_channel_led,(pot));
+			printf("duty: %d", pot);
+			vTaskDelay(1500 / portTICK_PERIOD_MS);
+		}
 	}
 }
-
-
 
 void task_afec(void){
 	xQueueAfec = xQueueCreate( 10, sizeof( int32_t ) );
@@ -645,28 +644,32 @@ static void task_led(void *pvParameters)
 {
 	xSemaphore = xSemaphoreCreateBinary();
 	xSemaphore2 = xSemaphoreCreateBinary();
-	printf("%d", duty);
+	int32_t duty = 0;
+	//printf("%d", duty);
 	
-	sprintf(texto, "%d", duty);
+	//sprintf(texto, "%d", duty);
     io_init();
 
 	if (xSemaphore == NULL)
 		printf("falha em criar o semaforo \n");
+	if (xSemaphore2 == NULL)
+	printf("falha em criar o semaforo2 \n");
 
-	for (;;) {
-		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 500) == pdTRUE ){
-			duty = duty + 10;
+	while (1) {
+		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 500) == pdTRUE && duty < 100){
+			duty = duty + 5;
 			printf("%d", duty);
 		}
 		if( xSemaphoreTake(xSemaphore2, ( TickType_t ) 500) == pdTRUE && duty > 0 ){
-			duty = duty - 10;
+			duty = duty - 5;
 			printf("%d", duty);
 			
 		}
-		sprintf(texto, "%d", duty);
-		font_draw_text(&digital52, texto, 110, 250, 1);
+		xQueueSend( xQueueTemp, &duty, 0);
+		//sprintf(texto, "%d", duty);
+		//font_draw_text(&digital52, texto, 110, 250, 1);
 	}
-}	
+}
 	
 	/*
 	xSemaphore = xSemaphoreCreateBinary();
@@ -700,8 +703,6 @@ int main(void)
 
 	sysclk_init(); /* Initialize system clocks */
 	board_init();  /* Initialize board */
-	pmc_enable_periph_clk(ID_PIO_PWM_0);
-	pio_set_peripheral(PIO_PWM_0, PIO_PERIPH_A, MASK_PIN_PWM_0 );
 	
 	/* inicializa e configura adc */
 	config_ADC();
