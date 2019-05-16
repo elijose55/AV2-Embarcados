@@ -20,8 +20,6 @@
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
-//volatile uint32_t temp_value = 0;
-//volatile uint32_t adc_value = 0;
 volatile uint32_t duty = 0;
 volatile char temp_text[512];
 volatile char fan_text[512];
@@ -125,7 +123,6 @@ typedef struct {
 QueueHandle_t xQueueTouch;
 QueueHandle_t xQueueDuty;
 QueueHandle_t xQueueTemp;
-//QueueHandle_t xQueueRealTemp;
 QueueHandle_t xQueueAfec;
 QueueHandle_t xQueueRTC;
 
@@ -314,38 +311,27 @@ static void AFEC_callback(void)
 	int32_t temp_value;
 	temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
 	xQueueSendFromISR( xQueueAfec, &temp_value, 0);
-	//temp_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
 	
 }
 
 void but_callback(void){
-	//font_draw_text(&digital52, "User mode  ", 120, 133, 1);
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback \n");
-	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
-	//
+	xSemaphoreGiveFromISR(xSemaphore, NULL);
 }
 
 void but_callback2(void){
-	//font_draw_text(&digital52, "User mode  ", 120, 133, 1);
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback2\n");
-	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
+	xSemaphoreGiveFromISR(xSemaphore2, NULL);
 }
 
 void RTC_Handler(void)
 {
 	uint32_t ul_status = rtc_get_status(RTC);
-	int32_t ok;
-	printf("KKKKKKKKK\n");
 	rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
-	printf("oi");
-	//BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	printf("QTQ");
 	flag_rtc = 1;
-	//xQueueSendFromISR( xQueueTemp, &ok, 0);
-	//rtc_clear_status(RTC, RTC_SCCR_SECCLR);
-	//xSemaphoreGiveFromISR(xSemaphoreRTC, &xHigherPriorityTaskWoken);
+	xSemaphoreGiveFromISR(xSemaphoreRTC, NULL);
 			
 	printf("rtc_callback333\n");
 	
@@ -549,7 +535,6 @@ void draw_temp(int temp) {
 	}
 	ili9488_draw_filled_rectangle(110,450,205,500);
 	font_draw_text(&digital52, temp_text, 110, 380, 1);
-	//ili9488_draw_filled_rectangle(14, ILI9488_LCD_HEIGHT - termometro.height+44, 19,ILI9488_LCD_HEIGHT - termometro.height - size +42 );
 }
 
 void draw_duty(int duty) {
@@ -570,25 +555,21 @@ uint32_t convert_axis_system_y(uint32_t touch_x) {
 }
 
 void set_mode(int mode){
-	printf("CLICADOOOOOOOOOOOOO");
 	int pot;
 	if(mode == 0){
 		pot = 20;
 		xQueueSend(xQueuePot, &pot, 0);
 		font_draw_text(&digital52, "Fan       ", 120, 133, 1);
-		//xQueueSend(xQueueTemp, 25, 0);
 	}
 	if(mode == 1){
 		pot = 50;
 		xQueueSend(xQueuePot, &pot, 0);
 		font_draw_text(&digital52, "Cold", 120, 133, 1);
-		//xQueueSend(xQueueTemp, 16, 0);
 	}
 	if(mode == 2){
 		pot = 100;
 		xQueueSend(xQueuePot, &pot, 0);
 		font_draw_text(&digital52, "TURBO      ", 120, 133, 1);
-		//xQueueSend(xQueueTemp, 16, 0);
 	}
 }
 
@@ -709,8 +690,6 @@ void task_lcd(void){
 	
 	configure_lcd();
 	draw_screen();
-	//Escreve HH:MM no LCD
-	//font_draw_text(&digital52, "HH:MM", 0, 0, 1);
 	
 	
 	touchData touch;
@@ -726,18 +705,11 @@ void task_lcd(void){
 			printf("x:%d y:%d\n", touch.x, touch.y);
 		}
 		if (xQueueReceive(xQueueDuty, &(duty), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
-			//printf("\n potencia: %d", duty);
 			draw_duty(duty);
 			vTaskDelay(300 / portTICK_PERIOD_MS);
 		}
 		if (xQueueReceive(xQueueTemp, &(temp), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
 			draw_temp(temp);
-			//pot = (temp < real_temp) ? (((real_temp - temp) * 100 ) / (100 - temp)) : 0;
-			//pot = 100 * (real_temp - temp) / (100 - temp);
-			//xQueueSend(xQueuePot, &pot, 0);
-			//draw_duty(pot);
-			
-			//printf("\ntemperatura desejada: %d", temp);
 		}
 
 	}
@@ -776,7 +748,6 @@ void task_afec(void){
 	while (true) {
 		if (xQueueReceive( xQueueAfec, &(adc_value), ( TickType_t )  2000 / portTICK_PERIOD_MS)) {
 			temp_value = convert_adc_to_temp(adc_value);
-			//printf("Temp : %d \r\n", temp_value);
 			afec_start_software_conversion(AFEC0);
 			xQueueSend( xQueueTemp, &temp_value, 0);
 		}
@@ -791,7 +762,7 @@ static void task_rtc(void *pvParameters)
 	printf("\n task rtc \n");
 	xSemaphoreRTC = xSemaphoreCreateBinary();
 	RTC_init();
-	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE,1, SECOND+14);
+	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE,1, SECOND+3);
 	int hora, min, sec;
 	int receive;
 
@@ -799,13 +770,9 @@ static void task_rtc(void *pvParameters)
 	printf("falha em criar o semaforoRTC \n");
 
 	while (1) {
-		//if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 10) == pdTRUE){
-		//if (xQueueReceive( xQueueRTC, &(receive), ( TickType_t )  50 / portTICK_PERIOD_MS)) {
-			if(flag_rtc == 1){
-				flag_rtc = 0;
+		if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 50) == pdTRUE){
 			printf("entrou");
 			rtc_get_time(RTC, &hora, &min, &sec);
-			//printf("\n rtc: %d, %d, %d \n", hora, min, sec);
 			min++;
 			if(min>=60){
 				min = 0;
@@ -815,7 +782,7 @@ static void task_rtc(void *pvParameters)
 				hora = 0;
 			}
 			rtc_set_time_alarm(RTC, 1, hora, 1, min, 1, sec);
-			sprintf(time_text,"%02d : %02d", hora, min);
+			sprintf(time_text,"%02d:%02d", hora, min);
 			font_draw_text(&digital52, time_text, 2, 2, 1);
 		}
 		
@@ -828,9 +795,6 @@ static void task_led(void *pvParameters)
 	xSemaphore = xSemaphoreCreateBinary();
 	xSemaphore2 = xSemaphoreCreateBinary();
 	int32_t duty = 0;
-	//printf("%d", duty);
-	
-	//sprintf(texto, "%d", duty);
     io_init();
 
 	if (xSemaphore == NULL)
@@ -851,22 +815,6 @@ static void task_led(void *pvParameters)
 		
 		
 	}
-}
-	
-	/*
-	xSemaphore = xSemaphoreCreateBinary();
-	for (;;) {
-		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 10) == pdTRUE ){
-			
-			//100ms
-			//const TickType_t xDelay = 100/ portTICK_PERIOD_MS;
-			g_ul_value = afec_channel_get_value(AFEC0, AFEC_CHANNEL);
-			printf("%d", g_ul_value);
-			char b[512];
-			sprintf(b, g_ul_value);
-			font_draw_text(&digital52, b, 110, 380, 1);
-		}
-	}/*
 }
 
 /************************************************************************/
