@@ -292,7 +292,19 @@ static void mxt_init(struct mxt_device *device)
 	+ MXT_GEN_COMMANDPROCESSOR_CALIBRATE, 0x01);
 }
 
-
+void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
+	char *p = text;
+	while(*p != NULL) {
+		char letter = *p;
+		int letter_offset = letter - font->start_char;
+		if(letter <= font->end_char) {
+			tChar *current_char = font->chars + letter_offset;
+			ili9488_draw_pixmap(x, y, current_char->image->width, current_char->image->height, current_char->image->data);
+			x += current_char->image->width + spacing;
+		}
+		p++;
+	}
+}
 /************************************************************************/
 /* Callbacks: / Handler                                                 */
 /************************************************************************/
@@ -307,12 +319,15 @@ static void AFEC_callback(void)
 }
 
 void but_callback(void){
+	//font_draw_text(&digital52, "User mode  ", 120, 133, 1);
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback \n");
 	xSemaphoreGiveFromISR(xSemaphore, &xHigherPriorityTaskWoken);
+	//
 }
 
 void but_callback2(void){
+	//font_draw_text(&digital52, "User mode  ", 120, 133, 1);
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("but_callback2\n");
 	xSemaphoreGiveFromISR(xSemaphore2, &xHigherPriorityTaskWoken);
@@ -362,7 +377,7 @@ void RTC_init(){
 	/* Configure RTC interrupts */
 	NVIC_DisableIRQ(RTC_IRQn);
 	NVIC_ClearPendingIRQ(RTC_IRQn);
-	NVIC_SetPriority(RTC_IRQn, 0);
+	NVIC_SetPriority(RTC_IRQn, 5);
 	NVIC_EnableIRQ(RTC_IRQn);
 
 	/* Ativa interrupcao via segundos */
@@ -406,9 +421,9 @@ void io_init(void)
 	// Configura NVIC para receber interrupcoes do PIO do botao
 	// com prioridade 4 (quanto mais próximo de 0 maior)
 	NVIC_EnableIRQ(BUT_PIO_ID);
-	NVIC_SetPriority(BUT_PIO_ID, 4);
+	NVIC_SetPriority(BUT_PIO_ID, 5);
 	NVIC_EnableIRQ(BUT2_PIO_ID);
-	NVIC_SetPriority(BUT2_PIO_ID, 4);
+	NVIC_SetPriority(BUT2_PIO_ID, 5);
 }
 
 void PWM0_init(uint channel, uint duty){
@@ -504,19 +519,7 @@ static int32_t convert_adc_to_temp(int32_t ADC_value){
   return(ul_temp-3);
 }
 
-void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
-	char *p = text;
-	while(*p != NULL) {
-		char letter = *p;
-		int letter_offset = letter - font->start_char;
-		if(letter <= font->end_char) {
-			tChar *current_char = font->chars + letter_offset;
-			ili9488_draw_pixmap(x, y, current_char->image->width, current_char->image->height, current_char->image->data);
-			x += current_char->image->width + spacing;
-		}
-		p++;
-	}
-}
+
 
 void draw_screen(void) {
 	ili9488_set_foreground_color(COLOR_CONVERT(COLOR_WHITE));
@@ -556,7 +559,7 @@ void draw_fan(int fan) {
 
 void draw_duty(int duty) {
 	sprintf(duty_text, "%2d   ", duty);
-	font_draw_text(&digital52, duty_text, 110, 250, 1);
+	font_draw_text(&digital52, duty_text, 113, 250, 1);
 }
 
 uint32_t convert_axis_system_x(uint32_t touch_y) {
@@ -577,19 +580,19 @@ void set_mode(int mode){
 	if(mode == 0){
 		pot = 20;
 		xQueueSend(xQueuePot, &pot, 0);
-		font_draw_text(&digital52, "Fan", 184, 130, 1);
+		font_draw_text(&digital52, "Fan       ", 120, 133, 1);
 		//xQueueSend(xQueueTemp, 25, 0);
 	}
 	if(mode == 1){
 		pot = 50;
 		xQueueSend(xQueuePot, &pot, 0);
-		font_draw_text(&digital52, "Turbo cold", 184, 130, 1);
+		font_draw_text(&digital52, "Cold", 120, 133, 1);
 		//xQueueSend(xQueueTemp, 16, 0);
 	}
 	if(mode == 2){
 		pot = 100;
 		xQueueSend(xQueuePot, &pot, 0);
-		font_draw_text(&digital52, "TURBO", 184, 130, 1);
+		font_draw_text(&digital52, "TURBO      ", 120, 133, 1);
 		//xQueueSend(xQueueTemp, 16, 0);
 	}
 }
