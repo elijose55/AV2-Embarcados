@@ -51,11 +51,11 @@ volatile int mode;
 #define MAX_ENTRIES        3
 
 struct ili9488_opt_t g_ili9488_display_opt;
-const uint32_t BUTTON_W = 120;
-const uint32_t BUTTON_H = 150;
+const uint32_t BUTTON_W = 64;
+const uint32_t BUTTON_H = 64;
 const uint32_t BUTTON_BORDER = 2;
-const uint32_t BUTTON_X = ILI9488_LCD_WIDTH/2;
-const uint32_t BUTTON_Y = ILI9488_LCD_HEIGHT/2;
+const uint32_t BUTTON_X = 40;
+const uint32_t BUTTON_Y = 130;
 
 #define BUT_PIO           PIOD
 #define BUT_PIO_ID        ID_PIOD
@@ -550,11 +550,6 @@ void draw_temp(int temp) {
 	ili9488_draw_filled_rectangle(110,450,205,500);
 	font_draw_text(&digital52, temp_text, 110, 380, 1);
 	//ili9488_draw_filled_rectangle(14, ILI9488_LCD_HEIGHT - termometro.height+44, 19,ILI9488_LCD_HEIGHT - termometro.height - size +42 );
-}
-
-void draw_fan(int fan) {
-	sprintf(fan_text, "%2d  ", fan);
-	font_draw_text(&digital52, fan_text, 110, 130, 1);
 }
 
 void draw_duty(int duty) {

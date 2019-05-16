@@ -19,23 +19,23 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY
   7 .comment      00000059  00000000  00000000  000709ee  2**0
                   CONTENTS, READONLY
-  8 .debug_info   000309cc  00000000  00000000  00070a47  2**0
+  8 .debug_info   0003094e  00000000  00000000  00070a47  2**0
                   CONTENTS, READONLY, DEBUGGING
-  9 .debug_abbrev 00005f66  00000000  00000000  000a1413  2**0
+  9 .debug_abbrev 00005f66  00000000  00000000  000a1395  2**0
                   CONTENTS, READONLY, DEBUGGING
- 10 .debug_aranges 00001538  00000000  00000000  000a7379  2**0
+ 10 .debug_aranges 00001530  00000000  00000000  000a72fb  2**0
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_macro  0002749d  00000000  00000000  000a88b1  2**0
+ 11 .debug_macro  0002749d  00000000  00000000  000a882b  2**0
                   CONTENTS, READONLY, DEBUGGING
- 12 .debug_line   00017f26  00000000  00000000  000cfd4e  2**0
+ 12 .debug_line   00017f12  00000000  00000000  000cfcc8  2**0
                   CONTENTS, READONLY, DEBUGGING
- 13 .debug_str    0009fe55  00000000  00000000  000e7c74  2**0
+ 13 .debug_str    0009fe4c  00000000  00000000  000e7bda  2**0
                   CONTENTS, READONLY, DEBUGGING
- 14 .debug_loc    0000f9ed  00000000  00000000  00187ac9  2**0
+ 14 .debug_loc    0000f988  00000000  00000000  00187a26  2**0
                   CONTENTS, READONLY, DEBUGGING
- 15 .debug_ranges 000017c0  00000000  00000000  001974b6  2**0
+ 15 .debug_ranges 000017b8  00000000  00000000  001973ae  2**0
                   CONTENTS, READONLY, DEBUGGING
- 16 .debug_frame  000048b8  00000000  00000000  00198c78  2**2
+ 16 .debug_frame  00004898  00000000  00000000  00198b68  2**2
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -12229,12 +12229,12 @@ void set_mode(int mode){
 
 00404d98 <update_screen>:
 	if(tx >= BUTTON_X && tx <= BUTTON_X + BUTTON_W) {
-  404d98:	38a0      	subs	r0, #160	; 0xa0
-  404d9a:	2878      	cmp	r0, #120	; 0x78
+  404d98:	3828      	subs	r0, #40	; 0x28
+  404d9a:	2840      	cmp	r0, #64	; 0x40
   404d9c:	d802      	bhi.n	404da4 <update_screen+0xc>
 		if(ty >= BUTTON_Y && ty <= BUTTON_Y+BUTTON_H) {
-  404d9e:	39f0      	subs	r1, #240	; 0xf0
-  404da0:	2996      	cmp	r1, #150	; 0x96
+  404d9e:	3982      	subs	r1, #130	; 0x82
+  404da0:	2940      	cmp	r1, #64	; 0x40
   404da2:	d900      	bls.n	404da6 <update_screen+0xe>
   404da4:	4770      	bx	lr
 void update_screen(uint32_t tx, uint32_t ty) {
