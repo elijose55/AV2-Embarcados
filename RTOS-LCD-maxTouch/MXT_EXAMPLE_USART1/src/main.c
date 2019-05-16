@@ -126,6 +126,7 @@ QueueHandle_t xQueueDuty;
 QueueHandle_t xQueueTemp;
 //QueueHandle_t xQueueRealTemp;
 QueueHandle_t xQueueAfec;
+QueueHandle_t xQueueRTC;
 
 QueueHandle_t xQueuePot;
 
@@ -319,25 +320,17 @@ void but_callback2(void){
 void RTC_Handler(void)
 {
 	uint32_t ul_status = rtc_get_status(RTC);
-
-	/*
-	*  Verifica por qual motivo entrou
-	*  na interrupcao, se foi por segundo
-	*  ou Alarm
-	*/
-	
-	/* Time or date alarm */
-	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
-			printf("KKKKKKKKK\n");
-			rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
-			printf("oi");
-			BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-			printf("QTQ");
-			//rtc_clear_status(RTC, RTC_SCCR_SECCLR);
-			xSemaphoreGiveFromISR(xSemaphoreRTC, &xHigherPriorityTaskWoken);
+	int32_t ok;
+	printf("KKKKKKKKK\n");
+	rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
+	printf("oi");
+	//BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	printf("QTQ");
+	xQueueSendFromISR( xQueueTemp, &ok, 0);
+	//rtc_clear_status(RTC, RTC_SCCR_SECCLR);
+	//xSemaphoreGiveFromISR(xSemaphoreRTC, &xHigherPriorityTaskWoken);
 			
-			printf("rtc_callback333\n");
-	}
+	printf("rtc_callback333\n");
 	
 	rtc_clear_status(RTC, RTC_SCCR_ACKCLR);
 	rtc_clear_status(RTC, RTC_SCCR_TIMCLR);
@@ -768,17 +761,20 @@ void task_afec(void){
 
 static void task_rtc(void *pvParameters)
 {
+	xQueueRTC = xQueueCreate( 10, sizeof( int32_t ) );
 	printf("\n task rtc \n");
 	xSemaphoreRTC = xSemaphoreCreateBinary();
 	RTC_init();
-	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE+1,1, SECOND);
+	rtc_set_time_alarm(RTC, 1, HOUR, 1, MINUTE,1, SECOND+14);
 	int hora, min, sec;
+	int receive;
 
 	if (xSemaphoreRTC == NULL)
 	printf("falha em criar o semaforoRTC \n");
 
 	while (1) {
-		if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 10) == pdTRUE){
+		//if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 10) == pdTRUE){
+		if (xQueueReceive( xQueueRTC, &(receive), ( TickType_t )  50 / portTICK_PERIOD_MS)) {
 			printf("entrou");
 			rtc_get_time(RTC, &hora, &min, &sec);
 			printf("\n rtc: %d, %d, %d \n", hora, min, sec);
