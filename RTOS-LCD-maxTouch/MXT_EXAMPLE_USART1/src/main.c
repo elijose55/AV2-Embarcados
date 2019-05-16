@@ -28,6 +28,7 @@ volatile char fan_text[512];
 volatile char duty_text[512];
 volatile char time_text[512];
 volatile char texto[32];
+volatile int mode;
 
 
 /* Canal do sensor de temperatura */
@@ -101,7 +102,7 @@ pwm_channel_t g_pwm_channel_led;
 #define MINUTE      0
 #define SECOND      0
 
-volatile Bool flag_rtc_alarme = true;
+volatile int flag_rtc = 0;
 
 /************************************************************************/
 /* RTOS                                                                  */
@@ -326,7 +327,8 @@ void RTC_Handler(void)
 	printf("oi");
 	//BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	printf("QTQ");
-	xQueueSendFromISR( xQueueTemp, &ok, 0);
+	flag_rtc = 1;
+	//xQueueSendFromISR( xQueueTemp, &ok, 0);
 	//rtc_clear_status(RTC, RTC_SCCR_SECCLR);
 	//xSemaphoreGiveFromISR(xSemaphoreRTC, &xHigherPriorityTaskWoken);
 			
@@ -553,7 +555,7 @@ void draw_fan(int fan) {
 }
 
 void draw_duty(int duty) {
-	sprintf(duty_text, "%2d", duty);
+	sprintf(duty_text, "%2d   ", duty);
 	font_draw_text(&digital52, duty_text, 110, 250, 1);
 }
 
@@ -569,10 +571,34 @@ uint32_t convert_axis_system_y(uint32_t touch_x) {
 	return ILI9488_LCD_HEIGHT*touch_x/4096;
 }
 
+void set_mode(int mode){
+	printf("CLICADOOOOOOOOOOOOO");
+	int pot;
+	if(mode == 0){
+		pot = 20;
+		xQueueSend(xQueuePot, &pot, 0);
+		font_draw_text(&digital52, "Fan", 184, 130, 1);
+		//xQueueSend(xQueueTemp, 25, 0);
+	}
+	if(mode == 1){
+		pot = 50;
+		xQueueSend(xQueuePot, &pot, 0);
+		font_draw_text(&digital52, "Turbo cold", 184, 130, 1);
+		//xQueueSend(xQueueTemp, 16, 0);
+	}
+	if(mode == 2){
+		pot = 100;
+		xQueueSend(xQueuePot, &pot, 0);
+		font_draw_text(&digital52, "TURBO", 184, 130, 1);
+		//xQueueSend(xQueueTemp, 16, 0);
+	}
+}
+
 void update_screen(uint32_t tx, uint32_t ty) {
-	if(tx >= BUTTON_X-BUTTON_W/2 && tx <= BUTTON_X + BUTTON_W/2) {
-		if(ty >= BUTTON_Y-BUTTON_H/2 && ty <= BUTTON_Y) {
-			} else if(ty > BUTTON_Y && ty < BUTTON_Y + BUTTON_H/2) {
+	if(tx >= BUTTON_X && tx <= BUTTON_X + BUTTON_W) {
+		if(ty >= BUTTON_Y && ty <= BUTTON_Y+BUTTON_H) {
+			mode++;
+			set_mode(mode%3);
 		}
 	}
 }
@@ -601,9 +627,11 @@ void mxt_handler(struct mxt_device *device, uint *x, uint *y)
 		/* Envia dados via fila RTOS                                            */
 		/************************************************************************/
 		if(first == 0 ){
+			if(touch_event.status < 60){
 			*x = convert_axis_system_x(touch_event.y);
 			*y = convert_axis_system_y(touch_event.x);
 			first = 1;
+			}
 		}
 		
 		i++;
@@ -700,7 +728,7 @@ void task_lcd(void){
 			printf("x:%d y:%d\n", touch.x, touch.y);
 		}
 		if (xQueueReceive(xQueueDuty, &(duty), ( TickType_t )  10 / portTICK_PERIOD_MS)) {
-			printf("\n potencia: %d", duty);
+			//printf("\n potencia: %d", duty);
 			draw_duty(duty);
 			vTaskDelay(300 / portTICK_PERIOD_MS);
 		}
@@ -711,7 +739,7 @@ void task_lcd(void){
 			//xQueueSend(xQueuePot, &pot, 0);
 			//draw_duty(pot);
 			
-			printf("\ntemperatura desejada: %d", temp);
+			//printf("\ntemperatura desejada: %d", temp);
 		}
 
 	}
@@ -774,10 +802,12 @@ static void task_rtc(void *pvParameters)
 
 	while (1) {
 		//if( xSemaphoreTake(xSemaphoreRTC, ( TickType_t ) 10) == pdTRUE){
-		if (xQueueReceive( xQueueRTC, &(receive), ( TickType_t )  50 / portTICK_PERIOD_MS)) {
+		//if (xQueueReceive( xQueueRTC, &(receive), ( TickType_t )  50 / portTICK_PERIOD_MS)) {
+			if(flag_rtc == 1){
+				flag_rtc = 0;
 			printf("entrou");
 			rtc_get_time(RTC, &hora, &min, &sec);
-			printf("\n rtc: %d, %d, %d \n", hora, min, sec);
+			//printf("\n rtc: %d, %d, %d \n", hora, min, sec);
 			min++;
 			if(min>=60){
 				min = 0;
@@ -813,14 +843,14 @@ static void task_led(void *pvParameters)
 	while (1) {
 		if( xSemaphoreTake(xSemaphore, ( TickType_t ) 500) == pdTRUE && duty < 100){
 			duty = duty + 10;
-			printf("%d", duty);
+			xQueueSend( xQueuePot, &duty, 0);
 		}
 		if( xSemaphoreTake(xSemaphore2, ( TickType_t ) 500) == pdTRUE && duty > 0 ){
 			duty = duty - 10;
-			printf("%d", duty);
+			xQueueSend( xQueuePot, &duty, 0);
 			
 		}
-		xQueueSend( xQueuePot, &duty, 0);
+		
 		
 	}
 }
